@@ -27,14 +27,17 @@ jobs:
       OPENAI_REALTIME_ENABLED: 'false'
       ADULT_TEST_MODE: 'false'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
+          package-manager-cache: false
       - name: Install locked dependencies
         run: npm ci
+      - name: Check dependency advisories including build tooling
+        run: npm audit --audit-level=moderate
       - name: Build web application
         run: npm run build
       - name: Validate curriculum and mocked voice transport
