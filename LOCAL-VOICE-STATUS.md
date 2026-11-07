@@ -1,27 +1,43 @@
-# Local voice integration status
+# 实时语音功能与限制
 
-This source revision adds an OpenAI Realtime GA WebRTC adapter and a same-origin Node server. It is separate from the earlier hosted silent version; publishing this source does not deploy it or release a container image.
+项目包含实验性的 OpenAI Realtime GA WebRTC 接入，默认模型为 `gpt-realtime-2.1-mini`，音色为 `marin`。配置步骤与协议细节见 [API-LOCAL.md](API-LOCAL.md)。
 
-The browser never receives or stores the standard API key. It requests a server-approved session, sends microphone audio over the official WebRTC connection, and plays remote model audio. There is no local TTS, prerecorded voice, or fallback synthesis. The model can lead the current lesson and request UI phase changes. Its completion tool does not persist a completed lesson: a human must confirm completion.
+## 工作方式
 
-Default mode is disabled. Only an explicitly configured adult test using fictitious situations is allowed. This release does not unlock child use. A checkbox or environment variable is not evidence of approved ZDR, consent, age-appropriate evaluation or other compliance requirements.
+1. 本地 Node.js 服务读取服务端 API key 和课程内容，创建当前课程的会话。
+2. 浏览器通过 WebRTC 将麦克风音频传给 OpenAI，并播放模型返回的音频。
+3. 模型可以引导当前课程，通过受限工具切换课程阶段。
+4. 完成本课仍需用户手动确认，模型不能自动保存完成记录。
 
-Stop, pause, changing lesson, resetting, page exit or backgrounding end the connection and release microphone tracks. Each browser session has a five-minute timer. This is a convenience limit, not a guaranteed financial budget control. The service limits new session attempts; use separate provider-side project budgets and account controls.
+未配置或未启用语音时，图文课程仍可使用。项目不使用本地 TTS、预录音频或替代合成声音来模拟 API 响应。
 
-## What is and is not tested
+## 使用限制
 
-Automated tests inject fake networking, peer connections and microphones. No real API key, paid call, recording or child data has been used. Frontend build and existing content tests are required in addition to these tests. Mock tests do not prove model availability, actual WebRTC negotiation, audio playback, interruption quality, lesson quality or account eligibility.
+- 当前仅供成人使用虚构情景测试，真实儿童使用未开放。
+- 语音默认关闭，需要服务端配置及页面确认后连接。
+- 服务仅支持可信本机访问。静态网页服务不包含语音 API。
+- 暂停、停止、切课、重置、离开页面或页面转入后台时，客户端会断开连接并释放麦克风。
+- 客户端设置五分钟计时器，但计时器可能受浏览器后台调度或客户端修改影响，不是服务器强制上限。
 
-Dockerfile.voice and compose.voice.yaml now package the local Node route; this container recipe is not built or published. The older static Docker/Nginx package and private Sites deployment remain separate. Do not expect those static hosting paths to gain voice just by copying an API key. The current local server is loopback-only; remote-phone/LAN use needs a separately secured HTTPS deployment and access control, not a simple port-forward.
+## 隐私与费用
 
-See API-LOCAL.md for current official documentation, environment settings and local running steps. Never put a key into VITE_* variables, frontend code, Git or chat.
+标准 API key 只由本地服务端读取，不返回浏览器。应用服务不将音频、转写或会话内容写入磁盘；语音仍会传给 OpenAI，供应商的数据保留规则需要单独确认。
 
-## Verification record (2026-11-06)
+连接可能产生 API 费用。会话创建限流、回复 token 限制和客户端计时器都不是费用硬上限，需要同时使用供应商账户的预算及用量管理功能。
 
-- Production build passed; 7 curriculum, 4 static-hosting, 17 browser-adapter mock and 17 server mock tests passed (45 total).
-- A real local Node HTTP server returned 200 for the built homepage and `/api/voice/status`, with ready=false and childUseAllowed=false. The exact runtime file subset was separately copied to a temporary directory and started successfully without node_modules.
-- Independent review caught and fixed missing runtime/build files in the container recipe, stale event handling, connecting-choice handling, unconfirmed restart cleanup, duplicate tool events and interrupted response scheduling.
-- Docker build/run/pull is NOT verified: no Docker executable, daemon or socket is available. No image was published. The separate cloud browser could not reach the local service in the attempted check (ERR_CONNECTION_REFUSED); current local revision has no successful native-browser visual/real microphone acceptance. Prior published-page testing does not prove this new integration.
-- No real credentials, OpenAI sessions, recordings, child data or paid calls were used. See CONTAINER-RELEASE.md for the release blockers.
+儿童使用还需要适用的数据保护配置、监护同意、适龄评估等条件。成人测试开关或页面勾选不能替代这些要求，详见 [儿童数据与上线前置条件](API-LOCAL.md#儿童数据与上线前置条件)。
 
-Follow-up offline verification: six additional adapter cases passed, covering insecure contexts, autoplay rejection, ICE failure, timeout with late microphone permission, malformed/unknown tools, and all 30 lessons' session/choice wiring. Current total is 51 tests (7 curriculum + 4 hosting + 23 adapter + 17 server). Independent final review found no further blocking issue after the fixes. Real provider behavior and a container build remain unverified.
+## 已验证与待验证
+
+[代码提交 d78a42f 的 CI](https://github.com/tomk50350-source/Kids-Learning/actions/runs/42327926134) 已通过前端构建、7 项课程测试、4 项静态托管测试、40 项语音客户端与服务端模拟测试，以及无密钥的 `linux/amd64` 容器检查。
+
+模拟测试覆盖课程会话配置、连接失败、工具参数校验、重复事件、断开清理、请求限制和服务端访问边界。测试使用模拟网络与麦克风。
+
+以下仍未完成验证：
+
+- 真实账户的模型访问权限和 WebRTC 握手。
+- 实际麦克风输入、音频播放、打断效果和延迟。
+- 模型在真实会话中的授课与工具行为。
+- 真实设备兼容性、实际费用和教学效果。
+
+容器构建通过不代表上述语音能力已经通过端到端测试。

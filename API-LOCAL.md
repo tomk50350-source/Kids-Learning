@@ -1,35 +1,35 @@
 # 本地实时语音接口（仅供成人使用虚构情景测试）
 
-## 已做与未做
+## 接口概览
 
-- 30 节现有课程（科学、数学、英语各 10 节）复用同一语音连接，服务器根据有效 `lessonId` 读取审核后的课程内容。
-- 实现 **OpenAI Realtime GA 的 WebRTC unified interface**，固定请求 `https://api.openai.com/v1/realtime/calls`。默认模型 **`gpt-realtime-2.1-mini`**，默认音色 `marin`。这不是 GPT-Live-1 集成；后者使用独立的 Live API，不能只把模型名改成 `gpt-live-1`。
-- 不使用录音素材、浏览器合成配音或假装 API 成功的备用声音。没有密钥时正常使用无语音课堂，语音连接保持关闭。
-- 本次开发只做离线注入假响应测试，**未配置真实密钥、未发起真实 OpenAI 会话、未验证模型访问权限、真实延迟、音质、模型工具行为或实际账单**。
-- 不是可公开发布的儿童产品。真实儿童语音目前不开放，也不存在可把儿童模式直接打开的环境变量。
+- 30 节课程（科学、数学、英语各 10 节）复用同一语音接入逻辑，服务器根据有效 `lessonId` 读取仓库中的课程内容。
+- 实现 **OpenAI Realtime GA 的 WebRTC unified interface**，固定请求 `https://api.openai.com/v1/realtime/calls`。默认模型 **`gpt-realtime-2.1-mini`**，默认音色 `marin`。支持的模型列表见下方环境变量表；切换到其他 API 系列需要单独的协议适配。
+- 音频输出来自 Realtime 连接，不使用预录音频或浏览器语音合成作为替代。没有密钥时正常使用无语音课堂，语音连接保持关闭。
+- 自动化测试使用模拟响应；**真实模型访问权限、WebRTC 音频连接、延迟、音质、模型工具行为及实际费用尚未完成端到端验证**。
+- 当前仅支持成人使用虚构情景测试，不提供真实儿童使用模式或儿童启用开关。
 
-官方 [WebRTC 接入文档](https://developers.openai.com/api/docs/guides/voice-webrtc?voice-api=realtime) 与 [Create call 参数](https://developers.openai.com/api/reference/resources/realtime/subresources/calls/methods/create) 已于 2026-11-06 核对：服务端用标准 API key 把 SDP 和会话配置放入 multipart 请求，向浏览器返回 SDP answer。使用 GA 结构，不发送旧的 `OpenAI-Beta` 头。
+协议参考：[WebRTC 接入](https://developers.openai.com/api/docs/guides/voice-webrtc?voice-api=realtime) 与 [Create call 参数](https://developers.openai.com/api/reference/resources/realtime/subresources/calls/methods/create)。服务端使用标准 API key，将 SDP 和会话配置放入 multipart 请求，向浏览器返回 SDP answer。请求采用 GA 结构，不发送旧的 `OpenAI-Beta` 头。
 
 ## 本地运行
 
-需要 Node.js 22+（本次测试：24.22.1），无需新增服务器依赖。使用仓库现有 `npm install` / `npm run build` 生成 `dist/client` 后：
+需要 Node.js 22+。安装与构建使用 `npm ci` 和 `npm run build`；服务端没有额外 npm 运行时依赖。生成 `dist/client` 后启动：
 
 ```sh
-# 无真实密钥、默认关闭的本地预览
-node server/index.mjs
+# 默认关闭语音的本地预览
+npm run start:local
 # 打开 http://127.0.0.1:8787
 ```
 
-以后有明确授权的成人测试时，由开发者在本机私密环境中配置，不在聊天、浏览器、源码、Vite 变量或公开仓库中粘贴密钥：
+`start:local` 不自动读取 `.env`。成人语音测试需要在本机 `.env` 配置服务端密钥，并使用以下启动方式。密钥不得写入前端、`VITE_*` 变量或版本控制：
 
 ```sh
 cp .env.example .env
 # 在本机编辑 .env。必须设置服务器端 OPENAI_API_KEY，
 # 以及 OPENAI_REALTIME_ENABLED=true 和 ADULT_TEST_MODE=true。
-node --env-file=.env server/index.mjs
+npm run start:configured
 ```
 
-普通 Node 模式仅监听 `127.0.0.1`，默认端口 8787；`LOCAL_PORT` 可设为 1024–65535。不要放在公网反向代理、LAN 代理或隧道后，也不要把 `.env` 打包。现有 Sites 静态部署和 Vite 开发服务**不会自动拥有这个接口**。本地需要从此 Node 服务访问构建后的同源页面。不要为了让网页能连接而放宽 Host / Origin 校验。
+普通 Node 模式仅监听 `127.0.0.1`，默认端口 8787；`LOCAL_PORT` 可设为 1024–65535。不要放在公网反向代理、LAN 代理或隧道后，也不要把 `.env` 打包。静态站点和 Vite 开发服务**不提供这个接口**。本地需要从此 Node 服务访问构建后的同源页面。不要为了让网页能连接而放宽 Host / Origin 校验。
 
 容器桥接网络需要另设 `LOCAL_CONTAINER_MODE=true`，此时进程在**容器内部**监听 `0.0.0.0`，只为接受 Docker 网关转发；宿主机端口必须显式发布成 **`127.0.0.1:8787:8787`**，不能用 `8787:8787` 或 `-p 8787:8787`。仅在隔离、可信的本机容器网络使用，不要把服务接入不可信容器网络，不使用 host networking，也不在普通宿主机 Node 进程开启此开关。容器模式会跳过 socket loopback 检查，但 Host 与 Origin 仍严格限定同一本机端口。Host/Origin 不能代替宿主机的 loopback 端口绑定，恶意非浏览器客户端可以伪造它们。
 
@@ -47,7 +47,7 @@ node --env-file=.env server/index.mjs
 | `LOCAL_PORT` | `8787` | 本地同源端口；不能启用 LAN 访问 |
 | `LOCAL_CONTAINER_MODE` | `false` | 仅容器桥接模式设 `true`；宿主机端口必须只发布到 `127.0.0.1` |
 
-## HTTP 合同
+## HTTP 接口
 
 浏览器应直接请求同源 `/api/...`。POST 必须带实际同源 Origin；不提供 CORS，也不接受跨端口开发页面。
 
@@ -123,7 +123,7 @@ node --env-file=.env server/index.mjs
 
 [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data) 列明了不同端点的保留与 ZDR 适用情况。ZDR 需要合资格审批与实际组织/项目设置，不是代码里写一个变量或 `store:false` 就能取得；本地不存内容也不代表提供商不保留数据。
 
-因此本版本**不提供真实儿童启用开关**。以后必须另行验证组织/项目获批并有效启用的 ZDR、选用端点/模型适用性、监护同意与隐私说明、适用儿童保护法律、适龄安全评估与事故处置；由有资格的负责人完成审查并修改/验证产品后才能开放。成人测试应使用自己的声音、虚构角色和虚构回答，不让儿童参与或说出真实儿童资料。
+本版本**不提供真实儿童启用开关**。儿童功能开放前需验证组织/项目获批并有效启用的 ZDR、选用端点/模型适用性、监护同意与隐私说明、适用儿童保护法律、适龄安全评估及事故处置流程，并由具备相应资质的负责人完成审查。成人测试仅使用成人声音、虚构角色和虚构回答，不包含儿童参与或真实儿童资料。
 
 ## 测试
 
@@ -131,4 +131,4 @@ node --env-file=.env server/index.mjs
 node --test tests/realtime-server.test.mjs
 ```
 
-全部上游请求使用注入 fake fetch；只启动本机 HTTP 测试服务器，不读真实密钥、不联网 OpenAI、不触发付费使用。覆盖默认拒绝、严格开关、儿童模式不可启用、Origin/Host、请求限制、30课程提示、工具schema、上游错误脱敏/超时、限流、并发和静态文件访问边界。真实麦克风与付费端到端验收需要之后单独授权。
+全部上游请求使用注入 fake fetch；只启动本机 HTTP 测试服务器，不读真实密钥、不联网 OpenAI、不触发付费使用。覆盖默认拒绝、严格开关、儿童模式不可启用、Origin/Host、请求限制、30课程提示、工具schema、上游错误脱敏/超时、限流、并发和静态文件访问边界。真实麦克风与收费 API 的端到端测试需独立执行，使用成人声音和虚构内容，并提前确认数据传输与费用。

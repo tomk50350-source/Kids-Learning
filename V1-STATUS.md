@@ -1,15 +1,31 @@
-# Revision note
+# 功能状态
 
-The hosted V1 status below describes the last published version. The current source revision adds a disabled-by-default, adult-only Realtime GA integration. See LOCAL-VOICE-STATUS.md and API-LOCAL.md. No real API call has been tested.
+当前为开发预览版，提供图文课程和默认关闭的实验性语音接入。仅支持成人使用虚构情景测试，尚未开放真实儿童使用。
 
-# V1 course build
+## 已实现
 
-This is an adult-only, silent evaluation build, not a finished child-facing voice tutor.
+- 科学、数学、英语各 10 节原创活动，共 30 节。
+- 六阶段课程流程：引入、点选、解释、动手活动、生活迁移、完成确认。
+- 课程与主题选择、科学概念图、数学点数和英语图文选项。
+- 科学预测反馈、数学与英语重试，不计分、不排名。
+- 当前浏览器的完成课程编号、课程目标与安全说明。
+- 每科完成 7 节后的下一组备课提示，可导出不含个人信息的备课请求。
+- 本地 Node.js 服务和 OpenAI Realtime GA WebRTC 适配。
+- 本机 Docker 构建与运行配置。
 
-Implemented: 30 original structured activities, ten per subject; theme routes; six-stage lesson flow; retry feedback; mathematical counters and pictorial English choices; local completed-course IDs; parent safety/source information; next-pack preparation hint after seven completions per subject; private hosting and Docker deployment configuration.
+## 当前限制
 
-Not implemented: official API transport, live voice, microphone access, model-led adaptive dialogue, child-data authorization, approved ZDR verification, authentication for LAN hosting, cross-device progress, automatic course generation. No API calls or local/pre-recorded speech are present. Connecting a key alone will not activate teaching.
+- 实时语音尚未完成真实 API、麦克风与音频端到端测试。
+- 尚未发布预构建容器镜像；已验证构建平台为 `linux/amd64`。
+- 没有账户系统、跨设备进度同步或远程访问认证。
+- 没有自动生成课程、学习能力评估或发音评分。
+- 完成标记表示课程流程完成，不表示掌握程度。
+- 科学图示是概念示意，不模拟真实物理过程；动手活动需要成人评估材料与风险。
+- 英语图文活动不能代替听力或口语测评。
+- 儿童数据保护配置、监护同意流程和适龄安全评估尚未完成。
 
-Science illustrations are decorative and not physics simulations. Physical activities require adult supervision. English is a script and visual preview of future API-led teaching, not a listening or pronunciation assessment. Course-completion markers indicate navigation completion, not learning mastery.
+## 自动化检查
 
-Eight science companions are available. Narrow viewport checks use actual 390×780 and 650×390 embedded browser viewports; these are responsive layout tests, not physical-device or device-emulation tests. Docker configuration is supplied but cannot run in this cloud environment because Docker, Podman, containerd and the Docker socket are absent.
+[2026-11-07 的 CI](https://github.com/tomk50350-source/Kids-Learning/actions/runs/42327926134) 对代码提交 `d78a42f` 完成前端构建、51 项测试、npm 依赖审计和无密钥容器检查。
+
+语音测试使用模拟响应，结果不涵盖实际语音服务或教学效果。详见 [语音功能说明](LOCAL-VOICE-STATUS.md)、[Docker 说明](CONTAINER-RELEASE.md) 和 [依赖安全说明](SECURITY-DEPENDENCIES.md)。

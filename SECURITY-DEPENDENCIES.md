@@ -1,37 +1,47 @@
-# Dependency remediation, 2026-11-07
+# 依赖安全说明
 
-This is a dependency-advisory check and targeted update, not a security audit or a claim that the application/container is secure.
+本文件说明 npm 依赖更新、检查方法及其范围，不构成完整安全审计。
 
-## Findings and reachability
+## 当前基线
 
-The first GitHub Actions build reported six affected packages (five high, one moderate). A subsequent local npm registry audit of the previous lockfile returned 13 affected packages (12 high, one moderate), including transitive propagation through Babel. These are observations from different runs; the first log did not contain the full advisory JSON, so the counts must not be treated as an identical advisory snapshot.
+[2026-11-07 的 CI](https://github.com/tomk50350-source/Kids-Learning/actions/runs/42327926134) 对代码提交 `d78a42f` 执行了包含开发依赖的 npm 审计，结果为 **0 项已知报告漏洞**。同次运行通过前端构建、51 项自动化测试及无密钥容器检查。
 
-Concrete advisory-bearing packages in the later report:
+审计结果依赖当时的漏洞数据库，会随新公告变化。它不覆盖未知漏洞、应用逻辑、模型行为、Node.js 基础镜像及操作系统软件包。
 
-- Vite: development-server/editor paths, including Windows editor argument/UNC handling and file access boundaries. Examples: GHSA-587h-7wmj-h5pm, GHSA-rq7h-c2jc-7f22.
-- PostCSS: sourceMappingURL traversal and map-file disclosure while parsing attacker-controlled stylesheets/maps. GHSA-r28c-9q8g-f849 and GHSA-fxqj-rqcc-2cmp.
-- nanoid: non-secure/custom generator loops for invalid sizes. GHSA-28wg-ghj8-5hjv and GHSA-2v37-7h3g-55p8.
-- source-map-js: denial of service through invalid indexed source-map offsets. GHSA-68fv-2mgg-jv7q.
-- Browserslist: memory growth and untrusted custom-stats handling. GHSA-c83g-rgw3-j3cx and GHSA-73wf-gq98-2v4g.
-- baseline-browser-mapping: process termination on invalid input. GHSA-w5vr-8v7q-w6rv.
+## 依赖更新
 
-Advisories are available at https://github.com/advisories/<ID>.
+当前锁文件包含以下更新：
 
-These packages belong to the build/development dependency chain. The production image copies only built browser assets, the Node server, curriculum and engine; it does not copy application node_modules, Vite, Babel or PostCSS. The backend imports only Node built-ins and checked-in source. The application does not expose a Vite dev server or accept user CSS/source maps for compilation in production. That reduces direct reachability of these findings in the intended production runtime, but does not excuse vulnerable build tooling or prove absence of other runtime issues. The Node base image/OS/global npm are NOT covered by an application npm audit.
+| 依赖 | 更新前 | 更新后 |
+| --- | --- | --- |
+| Vite | 6.4.2 | 6.4.5 |
+| PostCSS | 8.5.16 | 8.5.32 |
+| nanoid | 3.3.15 | 3.3.20 |
+| source-map-js | 1.2.1 | 1.2.2 |
+| Browserslist | 4.28.5 | 4.29.5 |
+| baseline-browser-mapping | 2.10.42 | 2.11.35 |
 
-## Applied changes
+Babel 与 Rollup 的兼容更新记录在 `package-lock.json`。Vite 及 React Vite 插件归入 `devDependencies`；CI 审计仍包含开发依赖，并在发现中等或更高风险公告时失败。
 
-- Vite 6.4.2 → 6.4.5, staying within the same major line.
-- Compatible transitive lockfile refresh, without `npm audit fix --force`, including PostCSS 8.5.16 → 8.5.32, nanoid 3.3.15 → 3.3.20, source-map-js 1.2.1 → 1.2.2, Browserslist 4.28.5 → 4.29.5 and baseline-browser-mapping 2.10.42 → 2.11.35. Babel and Rollup compatible updates are recorded in package-lock.json.
-- Vite and the React Vite plugin moved to devDependencies to accurately describe their use. The audit below still includes development dependencies; findings were not hidden with `--omit=dev`.
-- CI now explicitly runs npm audit with moderate-or-higher findings failing the job.
-- Official checkout/setup-node actions updated from v4 to v7 (Node24 action runtime), with credential persistence and package cache disabled. This is separate from the application Node22 runtime.
-- Container smoke test verifies a non-root process and absence of /app/node_modules, in addition to homepage, disabled API and no-key status.
+相关公告涉及开发服务器文件访问、源码映射处理、无效输入及资源消耗，例如 [Vite](https://github.com/advisories/GHSA-587h-7wmj-h5pm)、[PostCSS](https://github.com/advisories/GHSA-r28c-9q8g-f849)、[nanoid](https://github.com/advisories/GHSA-28wg-ghj8-5hjv) 和 [source-map-js](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)。
 
-## Verification and limits
+## 生产运行范围
 
-Local clean npm ci, production build and all 51 tests passed. Full `npm audit --json` after the update returned zero known reported vulnerabilities at this check. This result is time-dependent and does not cover unknown vulnerabilities, OS/base-image packages, application logic or adversarial prompt behavior.
+语音容器仅复制构建后的浏览器资源、Node.js 服务、课程数据和课程逻辑，不复制应用的 `node_modules`。服务端使用 Node.js 内置模块和仓库源码，生产服务不运行 Vite，也不接受用户提交的 CSS 或 source map 进行编译。
 
-The prior commit passed a real GitHub Actions linux/amd64 image build and no-key container smoke test: https://github.com/tomk50350-source/Kids-Learning/actions/runs/42327372389 . The updated lockfile and workflow require a new CI run; do not carry that previous success forward as proof of the new image.
+这种打包方式减少了上述构建工具在运行时的直接暴露，但构建环境仍需使用已修复的依赖。容器中的 Node.js、系统软件包和全局工具需要单独维护与检查。
 
-No registry image has been published, and no real API key/audio, paid OpenAI request or child data was used. Child eligibility/ZDR and real voice end-to-end verification remain separate unresolved release requirements.
+## 检查方法
+
+```sh
+npm ci
+npm audit --audit-level=moderate
+npm run build
+npm run test:curriculum
+npm run test:sites
+npm run test:voice
+```
+
+修改依赖或容器配置后，可在 Docker 环境运行 `sh scripts/verify-container.sh`。该脚本检查非 root 运行、应用目录不包含 `node_modules`、首页可用及无密钥时语音接口关闭，不调用真实 API。
+
+真实语音测试、远程访问安全和儿童数据保护不属于 npm 依赖审计范围，参见 [语音说明](API-LOCAL.md)。
