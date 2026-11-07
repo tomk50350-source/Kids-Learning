@@ -1,0 +1,53 @@
+name: Container and offline voice checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/container-check.yml'
+      - 'Dockerfile.voice'
+      - '.dockerignore'
+      - 'compose.voice.yaml'
+      - 'package*.json'
+      - 'index.html'
+      - 'vite.config.*'
+      - 'src/**'
+      - 'server/**'
+      - 'public/**'
+      - 'scripts/**'
+      - 'tests/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      OPENAI_API_KEY: ''
+      OPENAI_REALTIME_ENABLED: 'false'
+      ADULT_TEST_MODE: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Build web application
+        run: npm run build
+      - name: Validate curriculum and mocked voice transport
+        run: |
+          npm run test:curriculum
+          npm run test:sites
+          npm run test:voice
+      - name: Validate localhost-only Compose definition
+        run: docker compose -f compose.voice.yaml config --quiet
+      - name: Build and smoke-test container with no API key
+        run: sh scripts/verify-container.sh
+      - name: Record boundaries
+        run: |
+          echo '### Offline container checks' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No API key, microphone, child data, OpenAI call, registry login or image publication is used.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This job tests linux/amd64 only. It does not establish real voice behavior or child eligibility.' >> "$GITHUB_STEP_SUMMARY"
