@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {validateCurriculum,readProgress,completeLesson,needsNextPack} from '../src/engine.mjs';
+const lessons=JSON.parse(fs.readFileSync(new URL('../src/curriculum.json',import.meta.url),'utf8'));
+test('three subjects each contain at least ten complete original lessons',()=>{assert.equal(lessons.length,30);assert.equal(validateCurriculum(lessons),true);for(const s of ['science','math','english'])assert.deepEqual(lessons.filter(l=>l.subject===s).map(l=>l.order).sort((a,b)=>a-b),[1,2,3,4,5,6,7,8,9,10])});
+test('every lesson has valid answer and a shipped scene asset',()=>{for(const l of lessons){assert.equal(typeof l.choices[l.answer],'string');assert.ok(fs.existsSync(new URL('../public/assets/'+l.theme+'.png',import.meta.url)),l.id+' scene missing');assert.match(l.sourceUrl,/^https:\/\//)}});
+test('progress rejects unknown IDs, duplicates and malformed storage',()=>{assert.deepEqual(readProgress('broken',lessons),{version:1,completed:[]});assert.equal(readProgress(JSON.stringify({completed:[lessons[0].id,lessons[0].id,'unknown']}),lessons).completed.length,1)});
+test('finishing each of thirty lessons is idempotent and persists only IDs',()=>{let p=readProgress(null,lessons);for(const l of lessons){p=completeLesson(p,l.id);p=completeLesson(p,l.id)}assert.equal(p.completed.length,30);assert.deepEqual(Object.keys(p).sort(),['completed','version'])});
+test('next-pack hint begins at seven completed lessons independently per subject',()=>{let p=readProgress(null,lessons);for(const s of ['science','math','english']){const set=lessons.filter(l=>l.subject===s);for(const l of set.slice(0,6))p=completeLesson(p,l.id);assert.equal(needsNextPack(p,lessons,s),false);p=completeLesson(p,set[6].id);assert.equal(needsNextPack(p,lessons,s),true)}});
+test('UI contains no embedded credentials or local speech synthesizer',()=>{const source=fs.readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8');for(const blocked of ['speechSynthesis','SpeechSynthesisUtterance','getUserMedia','SpeechRecognition','fetch(','XMLHttpRequest','OPENAI_API_KEY','RTCPeerConnection'])assert.equal(source.includes(blocked),false,blocked)});
+test('eight science companions have their own shipped character assets',()=>{for(const name of ['bear','whale','companion-planet','companion-rabbit','companion-fox','companion-drop','companion-butterfly','companion-sprout'])assert.ok(fs.existsSync(new URL('../public/assets/'+name+'.png',import.meta.url)),name)});
