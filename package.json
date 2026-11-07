@@ -1,0 +1,23 @@
+{
+  "name": "bear-interactive",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/prepare-sites-build.mjs",
+    "preview": "vite preview",
+    "test:sites": "node --test tests/sites-worker.test.mjs",
+    "test:curriculum": "node --test tests/curriculum.test.mjs",
+    "start:local": "node server/index.mjs",
+    "start:configured": "node --env-file=.env server/index.mjs",
+    "test:voice": "node --test tests/realtime-client.test.mjs tests/realtime-server.test.mjs"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@vitejs/plugin-react": "5.0.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.2"
+  }
+}

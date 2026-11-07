@@ -1,0 +1,24 @@
+# Local adult-only test. This is NOT a published registry image reference.
+services:
+  learning:
+    build:
+      context: .
+      dockerfile: Dockerfile.voice
+    image: discovery-learning:local
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_REALTIME_ENABLED: ${OPENAI_REALTIME_ENABLED:-false}
+      ADULT_TEST_MODE: ${ADULT_TEST_MODE:-false}
+      OPENAI_REALTIME_MODEL: ${OPENAI_REALTIME_MODEL:-gpt-realtime-2.1-mini}
+      OPENAI_REALTIME_VOICE: ${OPENAI_REALTIME_VOICE:-marin}
+      LOCAL_PORT: "8787"
+      LOCAL_CONTAINER_MODE: "true"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
