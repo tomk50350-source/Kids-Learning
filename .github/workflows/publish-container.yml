@@ -1,0 +1,95 @@
+name: Publish or verify public container
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-container.yml']
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Publish a tested image or verify anonymous pulling after package visibility is public
+        required: true
+        default: publish
+        type: choice
+        options: [publish, verify-public]
+permissions:
+  contents: read
+concurrency:
+  group: kids-learning-container-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.event_name == 'push' || inputs.mode == 'publish'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/tomk50350-source/kids-learning
+      OPENAI_API_KEY: ''
+      OPENAI_REALTIME_ENABLED: 'false'
+      ADULT_TEST_MODE: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Validate source and dependencies
+        run: |
+          npm ci
+          npm audit --audit-level=moderate
+          npm run build
+          npm run test:curriculum
+          npm run test:sites
+          npm run test:voice
+          docker compose -f compose.voice.yaml config --quiet
+      - name: Build and check no-key runtime
+        run: sh scripts/verify-container.sh
+      - name: Build labeled release image
+        run: |
+          docker build -f Dockerfile.voice \
+            --label org.opencontainers.image.source=https://github.com/tomk50350-source/Kids-Learning \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            --label org.opencontainers.image.description='Kids Learning adult-test preview; real child use is not enabled' \
+            -t "$IMAGE:sha-${GITHUB_SHA:0:12}" -t "$IMAGE:preview" .
+          test "$(docker image inspect "$IMAGE:preview" --format '{{.Architecture}}')" = amd64
+      - name: Authenticate only for this job
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Push tested preview
+        run: |
+          docker push "$IMAGE:sha-${GITHUB_SHA:0:12}"
+          docker push "$IMAGE:preview"
+          echo '### Published linux/amd64 adult-test preview' >> "$GITHUB_STEP_SUMMARY"
+          echo "$IMAGE:sha-${GITHUB_SHA:0:12}" >> "$GITHUB_STEP_SUMMARY"
+          docker image inspect "$IMAGE:preview" --format '{{json .RepoDigests}}' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Registry visibility and anonymous pull must be verified separately; no API voice call was made.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove registry login
+        if: always()
+        run: docker logout ghcr.io || true
+  verify-public:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'verify-public'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {}
+    env:
+      IMAGE: ghcr.io/tomk50350-source/kids-learning
+    steps:
+      - name: Pull with an empty Docker credential directory
+        run: |
+          export DOCKER_CONFIG="$(mktemp -d)"
+          echo "DOCKER_CONFIG=$DOCKER_CONFIG" >> "$GITHUB_ENV"
+          docker pull "$IMAGE:preview"
+          docker image inspect "$IMAGE:preview" --format 'platform={{.Os}}/{{.Architecture}} digests={{json .RepoDigests}}'
+          echo '### Anonymous pull verified' >> "$GITHUB_STEP_SUMMARY"
+          docker image inspect "$IMAGE:preview" --format '{{json .RepoDigests}}' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify pulled image without a key or microphone
+        run: |
+          trap 'docker rm -f kids-learning-public-check >/dev/null 2>&1 || true' EXIT
+          docker run -d --name kids-learning-public-check --read-only --tmpfs /tmp:size=16m --cap-drop ALL --security-opt no-new-privileges:true -e OPENAI_API_KEY= -e OPENAI_REALTIME_ENABLED=false -e ADULT_TEST_MODE=false "$IMAGE:preview"
+          sleep 2
+          docker exec kids-learning-public-check node --input-type=module -e "const s=await (await fetch('http://127.0.0.1:8787/api/voice/status')).json();if(s.ready||s.configured||s.childUseAllowed)throw Error('unsafe default');const r=await fetch('http://127.0.0.1:8787/');if(!r.ok)throw Error('homepage');console.log('Publicly pulled image runs without a key; no paid API call made')"
